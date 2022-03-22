@@ -1,19 +1,20 @@
-#!/bin/bash
+#!/bin/sh
 export TOPDIR=$(pwd)
 #####################################
 help()
 {
    # Display help
-   echo "The UBCLI script allows for flashing devices from the terminal."
-   echo
-   echo "Syntax: ubcli.sh [-c|-h|-d|-w|-b]"
-   echo "options:"
-   echo "   -c | --channel         Used to select a channel to install to the device."
-   echo "   -d | --device          Used to specify a device. If no device is specificed the tool will try to automatically detect a device."
-   echo "   -w | --wipe            Used to wipe the data partition of the device. Used when installing UT for the first time or wiping your user data"
-   echo "   -s | --setup           Used to install the dependencies for the script."
-   echo "   -b | --bootstrap       Used to install UT to a device for the first time. If you've installed UT already then don't enable this option"
-   echo "   -h | --help            Display this message."
+   printf "The UBCLI script allows for flashing devices from the terminal.
+
+Syntax: ubcli.sh [-c|-h|-d|-w|-b]
+options:
+   -c | --channel         Used to select a channel to install to the device.
+   -d | --device          Used to specify a device. If no device is specificed the tool will try to automatically detect a device.
+   -w | --wipe            Used to wipe the data partition of the device. Used when installing UT for the first time or wiping your user data
+   -s | --setup           Used to install the dependencies for the script.
+   -b | --bootstrap       Used to install UT to a device for the first time. If you've installed UT already then don't enable this option
+   -h | --help            Display this message.
+"
 }
 ########################################################
 # Colors
@@ -25,7 +26,7 @@ MAGENTA="$(printf '\033[35m')"  CYAN="$(printf '\033[36m')"  WHITE="$(printf '\0
 ########################################################
 
 # Welcome message
-echo -e ${GREEN}${ENDBOLDCOLOR}"Welcome to UBCLI! A tool to install Ubuntu Touch on your device from the command-line!"${NC}
+printf "%s%sWelcome to UBCLI! A tool to install Ubuntu Touch on your device from the command-line!${NC}\n" "${GREEN}" "${ENDBOLDCOLOR}"
 
 while [ "$1" != "" ]; do
     case $1 in
@@ -45,12 +46,13 @@ while [ "$1" != "" ]; do
         WIPE=true
         ;;
     -s | --setup)
-        bash $TOPDIR/scripts/setup.sh
+        bash "$TOPDIR"/scripts/setup.sh
         exit
         ;;
     -b | --bootstrap)
         BOOTSTRAP=true
-        source $TOPDIR/scripts/bootstrap.sh
+        # shellcheck source=/dev/null
+        . "$TOPDIR"/scripts/bootstrap.sh
         ;;
     *)
         help
@@ -61,54 +63,55 @@ while [ "$1" != "" ]; do
 done
 
 # Device selector
-if [ -z $DEVICE ]; then
+if [ -z "$DEVICE" ]; then
     DEVICE=$(adb shell getprop ro.product.vendor.name | tr -d '\r')
 fi
 #########################
 # Exit if no device found
-if [ "$DEVICE" == "" ]; then
-echo -e ${RED}${ENDBOLDCOLOR}"ERROR: No device found or defined!"${NC}
+if [ "$DEVICE" = "" ]; then
+printf "%s%sERROR: No device found or defined!${NC}" "${RED}" "${ENDBOLDCOLOR}"
 exit 1
 fi
 
 # Exit in case of no channel defined.
-if [ ! $CHANNEL ]; then
-echo -e ${RED}${ENDBOLDCOLOR}"ERROR: No channel defined!"${NC}
+if [ ! "$CHANNEL" ]; then
+echo "${RED}""${ENDBOLDCOLOR}""ERROR: No channel defined!""${NC}"
 exit 1
 fi
 
 CONFIG="$(pwd)/installer-configs/v2/devices/${DEVICE}.yml"
-CFG=$(yq eval -o json $CONFIG 2>/dev/null)
+CFG=$(yq eval -o json "$CONFIG" 2>/dev/null)
 if [ $? -ne 0 ]; then
-    CFG=$(yq . $CONFIG 2>/dev/null)
+    CFG=$(yq . "$CONFIG" 2>/dev/null)
 fi
-DEVICEINFO=$(echo $CFG | jq -r .name)
+DEVICEINFO=$(echo "$CFG" | jq -r .name)
 
-echo Installing on $DEVICEINFO
+echo Installing on "$DEVICEINFO"
 
-for name in $(echo $CFG | jq .unlock[]); do
-    ACTION=$(echo $CFG | jq -r .user_actions[$name])
-    DESCRIPTION=$(echo $ACTION | jq -r .description)
-    LINK=$(echo $ACTION | jq -r '.link // ""')
-    echo ${BLUE}***********************************************
-    echo ${RED}${ENDBOLDCOLOR}${DESCRIPTION}
-    [ ! -z $LINK ] && echo $LINK
+for name in $(echo "$CFG" | jq .unlock[]); do
+    ACTION=$(echo "$CFG" | jq -r .user_actions[$name])
+    DESCRIPTION=$(echo "$ACTION" | jq -r .description)
+    LINK=$(echo "$ACTION" | jq -r '.link // ""')
+    echo "${BLUE}"***********************************************
+    echo "${RED}""${ENDBOLDCOLOR}""${DESCRIPTION}"
+    [ -n "$LINK" ] && echo "$LINK"
 done
-echo -e ${BLUE}***********************************************${NC}
+printf "%s***********************************************${NC}" "${BLUE}"
 
 reset_color
 
 :
 
 echo "Do you wish to continue?"
-select yn in "Yes" "No"; do
-    case $yn in
-        Yes ) :; break;;
-        No ) echo "go throw phone in volcano"; exit;;
-    esac
-done
+printf "1) Yes\n2) No\n#? "
+read -r yn 
+case $yn in
+    1 ) ;;
+    2 ) echo "go throw phone in volcano"; exit;;
+esac
 
-if [ "$BOOTSTRAP" == "true" ]; then
+
+if [ "$BOOTSTRAP" = "true" ]; then
 bootstrap
 clean
 fi
@@ -137,7 +140,7 @@ download_file_and_asc "${URL}/gpg/image-master.tar.xz" "$OUTPUT"
 # Start to generate ubuntu_command file
 echo '# Generated by ubports rootfs-builder-debos' > "$OUTPUT/ubuntu_command"
 
-if [ "$WIPE" == "true" ]; then
+if [ "$WIPE" = "true" ]; then
 cat << EOF >> "$OUTPUT/ubuntu_command"
 format system
 format data
@@ -156,7 +159,7 @@ fi
 
 # Download and fill ubuntu_command
 for file_path in ${files}; do
-    file=$(basename ${file_path})
+    file=$(basename "${file_path}")
     download_file_and_asc "${URL}/${file_path}" "$OUTPUT"
     echo "update $file $file.asc" >> "$OUTPUT/ubuntu_command"
 done
@@ -169,7 +172,7 @@ adb shell rm -rf /cache/recovery
 adb shell mkdir /cache/recovery
 
 # Start installation on device end
-adb push $OUTPUT/* /cache/recovery/*
+adb push "$OUTPUT"/* /cache/recovery/*
 adb reboot recovery
 
-echo ${GREEN}"Installation complete! You can safely unplug your device now."
+echo "${GREEN}""Installation complete! You can safely unplug your device now."
